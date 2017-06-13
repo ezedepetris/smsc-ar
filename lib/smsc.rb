@@ -1,10 +1,41 @@
 require 'open-uri'
 
 class Smsc
+  attr_reader :errors
 
   def initialize(account, apiKey)
     @alias = account
     @apiKey = apiKey
+    @errors = []
+  end
+
+  ##
+  # Validar número
+  # @return bool Devuelve true si es un número válido.
+  #
+  def valid_phone?(number)
+    response = run('evalnumero', nil, number)
+    response["data"]["estado"]
+    
+    # public function evalNumero($prefijo, $fijo = null)
+    # {
+    #   $ret = $this->exec('evalnumero', '&num='.$prefijo.($fijo === null?'':'-'.$fijo));
+    #   if (!$ret)
+    #     return false;
+    #   if ($this->getStatusCode() != 200)
+    #   {
+    #      throw new Exception($this->getStatusMessage(), $this->getStatusCode());
+    #      return false;
+    #   } else {
+    #     $ret = $this->getData();
+    #     return $ret['estado'];
+    #   }
+    # }
+  end
+
+  def active?
+    response = run('estado')
+    response["code"] == 200
   end
 
   ##
@@ -12,7 +43,8 @@ class Smsc
    # @return bool Devuelve true si no hay demoras en la entrega.
   #
   def status
-    run('estado')
+    response = run('estado')
+    { code: response["code"], message: response["message"] }
     # public function getEstado()
     # {
     #   $ret = $this->exec('estado');
@@ -31,10 +63,12 @@ class Smsc
 
   ##
   #
-  # @return array
+  # 
   #
   def balance
-    run('saldo')
+    response = run('saldo')
+    response["data"]["mensajes"]
+
     # public function getSaldo()
     # {
     #   $ret = $this->exec('saldo');
@@ -57,15 +91,14 @@ class Smsc
     
   end
 
-
-
   ##
   #
   # @param int $prioridad 0:todos 1:baja 2:media 3:alta
   # @return array
   #
-  def enqueued(priority=nil)
-    run('encolados', nil, nil, nil, priority)
+  def enqueued(priority=0)
+    response = run('encolados', nil, nil, nil, nil, priority)
+    response["data"]["mensajes"]
     # public function getEncolados($prioridad = 0)
     # {
     #   $ret = $this->exec('encolados', '&prioridad='.intval($prioridad));
@@ -81,6 +114,7 @@ class Smsc
     #   }
     # }
   end
+
   ##
   # ###########################################
   # #######   Metodos para enviar SMS   #######
@@ -94,7 +128,8 @@ class Smsc
   #          Ej: 530000
   #
   def send(num, msj, time=nil)
-    run('enviar', nil, num, msj, time)
+    response = run('enviar', nil, num, msj, time)
+    response["code"] == 200
 
     # public function enviar()
     # {
@@ -110,6 +145,7 @@ class Smsc
     #   }
     # }
   end
+
   ##
   # ###############################################
   # #######  Metodos para hacer consultas   #######
@@ -126,7 +162,16 @@ class Smsc
   #            consulta y permite un chequeo rápido de nuevos mensajes)
   #
   def received(lastId=nil)
-    run('recibidos', lastId)
+    response = run('recibidos', lastId)
+    response["data"].map do |message|
+      {
+        id: message["id"],
+        date: message["fechahora"],
+        message: message["mensaje"],
+        from: message["de"],
+        phone: message["linea"]
+      }
+    end
     # public function getRecibidos($ultimoid = 0)
     # {
     #   $ret = $this->exec('recibidos', '&ultimoid='.(int)$ultimoid);
@@ -142,7 +187,7 @@ class Smsc
     # }
   end
 
-  # Devuelve los últimos 30 SMSC enviados.
+  # Return the lastest 30 smsc messages sent..
   # 
   # Lo óptimo es usar esta función cuando se recibe la notificación, que puede
   # especificar en https://www.smsc.com.ar/usuario/api/
@@ -152,7 +197,21 @@ class Smsc
   #            consulta y permite un chequeo rápido de los mensajes enviados)
   #
   def sent(lastId=nil)
-    run('enviados', lastId)
+    response = run('enviados', lastId)
+    response["data"].map do |message|
+      {
+        id: message["id"],
+        date: message["fechahora"],
+        message: message["mensaje"],
+        recipients: message["destinatarios"].map do |recipient|
+          { 
+            code_area: recipient["prefijo"],
+            phone: recipient["fijo"],
+            status: recipient["enviado"]["estado_desc"]
+          }
+        end
+      }
+    end
   end
 
   private
@@ -181,7 +240,7 @@ class Smsc
     end
     query += "&#{options.join('&')}" if options.present?
 
-    open(query).read
+    JSON.parse open(query).read
 
     # public function exec($cmd = null, $extradata = null)
     # {
@@ -211,25 +270,26 @@ class Smsc
     # }
   end
 
-  ##
-  # Validar número
-  # @return bool Devuelve true si es un número válido.
-  #
-  def eval_number(num)
-    
-    # public function evalNumero($prefijo, $fijo = null)
-    # {
-    #   $ret = $this->exec('evalnumero', '&num='.$prefijo.($fijo === null?'':'-'.$fijo));
-    #   if (!$ret)
-    #     return false;
-    #   if ($this->getStatusCode() != 200)
-    #   {
-    #      throw new Exception($this->getStatusMessage(), $this->getStatusCode());
-    #      return false;
-    #   } else {
-    #     $ret = $this->getData();
-    #     return $ret['estado'];
-    #   }
-    # }
+  def error(code)
+    case code
+      when 400 
+        @errors << "Parámetro sin especificar"
+      when 401 
+        @errors << "Acceso no autorizado"
+      when 402 
+        @errors << "Comando no reconocido."
+      when 403 
+        @errors << "Número incorrecto"
+      when 404 
+        @errors << "Debe especificar al menos un número válido"
+      when 405 
+        @errors << "No tienes mensajes en tu cuenta"
+      when 406 
+        @errors << "Has superado el límite de sms diarios"
+      when 499 
+        @errors << "Error desconocido"
+      else
+        @errors << "Server error"
+    end
   end
 end

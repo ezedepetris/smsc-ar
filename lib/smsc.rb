@@ -18,7 +18,7 @@ class Smsc
       response = run('evalnumero', nil, number)
       response["data"]["estado"]
     rescue => e
-      errors(response["code"])
+      error(response["code"])
       false
     end
   end
@@ -28,7 +28,7 @@ class Smsc
       response = run('estado')
       response["code"] == 200
     rescue => e
-      errors(response["code"])
+      error(response["code"])
       false
     end
   end
@@ -42,7 +42,7 @@ class Smsc
       response = run('estado')
       { code: response["code"], message: response["message"] }
     rescue => e
-      errors(response["code"])
+      error(response["code"])
       false
     end
   end
@@ -56,7 +56,7 @@ class Smsc
       response = run('saldo')
       response["data"]["mensajes"]
     rescue => e
-      errors(response["code"])
+      error(response["code"])
       false
     end
   end
@@ -77,7 +77,7 @@ class Smsc
       response = run('encolados', nil, nil, nil, nil, priority)
       response["data"]["mensajes"]
     rescue => e
-      errors(response["code"])
+      error(response["code"])
       false
     end
   end
@@ -99,7 +99,7 @@ class Smsc
       response = run('enviar', nil, num, msj, time)
       response["code"] == 200
     rescue => e
-      errors(response["code"])
+      error(response["code"])
       false
     end
   end
@@ -132,7 +132,7 @@ class Smsc
         }
       end
     rescue => e
-      errors(response["code"])
+      error(response["code"])
       false
     end
   end
@@ -177,7 +177,7 @@ class Smsc
         }
       end
     rescue => e
-      errors(response["code"])
+      error(response["code"])
       false
     end
   end
@@ -216,25 +216,25 @@ class Smsc
   end
 
   def error(code)
-    case code
+    case code.to_i
       when 400 
-        "Parameter not specified"
+        @errors << "Parameter not specified"
       when 401 
-        "Unauthorized access"
+        @errors << "Unauthorized access"
       when 402 
-        "Unrecognized command"
+        @errors << "Unrecognized command"
       when 403 
-        "Wrong number"
+        @errors << "Wrong number"
       when 404 
-        "You must specify at least one valid number"
+        @errors << "You must specify at least one valid number"
       when 405 
-        "You have no messages in your account"
+        @errors << "You have no messages in your account"
       when 406 
-        "You have exceeded the daily sms limit"
+        @errors << "You have exceeded the daily sms limit"
       when 499 
-        "Unknown error"
+        @errors << "Unknown error"
       else
-        "Server error"
+        @errors << "Server error"
     end
   end
 end

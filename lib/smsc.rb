@@ -10,9 +10,9 @@ class Smsc
   end
 
   ##
-  # Validar número
-  # @return bool Devuelve true si es un número válido.
-  #
+  # Valid the phone number
+  # Return true if is a valid phone number
+  ##
   def valid_phone?(number)
     begin
       response = run('evalnumero', nil, number)
@@ -23,6 +23,9 @@ class Smsc
     end
   end
 
+  ##
+  # Check the server status, return true if it's active, false in other case
+  ##
   def active?
     begin
       response = run('estado')
@@ -34,9 +37,11 @@ class Smsc
   end
 
   ##
-   # Estado del sistema SMSC.
-   # @return bool Devuelve true si no hay demoras en la entrega.
-  #
+  # Check the server status
+  # Return hash with the keys :code, :message
+  # code: is the status of the server response, 200 its oky!
+  # message: is the message if the query to the serve has problems
+  ##
   def status
     begin
       response = run('estado')
@@ -48,9 +53,9 @@ class Smsc
   end
 
   ##
-  #
-  # 
-  #
+  # Check the balanca on Smsc
+  # return the value balance or false in case of error
+  ##
   def balance
     begin
       response = run('saldo')
@@ -61,17 +66,25 @@ class Smsc
     end
   end
 
-  # Todos los SMS que están esperando para salir son marcados como cancelados. 
-  # De esa forma la cola que en 0 y esos SMS nunca saldrán.
+  ##
+  # Cancel all messages enqueued
+  ##
   def cancel_queue
-    
+    begin
+      response = run('cancelqueue')
+      response["code"] == 200
+    rescue => e
+      error(response["code"])
+      false
+    end
   end
 
   ##
-  #
-  # @param int $prioridad 0:todos 1:baja 2:media 3:alta
-  # @return array
-  #
+  # Chek the messages enqueued to send later
+  # by default the parameter is 0
+  # param priority 0:all 1:low 2:middle 3:high
+  # return an array with all messages enqueued with te priority specified
+  ##
   def enqueued(priority=0)
     begin
       response = run('encolados', nil, nil, nil, nil, priority)
@@ -84,16 +97,21 @@ class Smsc
 
   ##
   # ###########################################
-  # #######   Metodos para enviar SMS   #######
+  # ########   Method to send a SMS   #########
   # ###########################################
   #
   ##
-  # @param integer $prefijo  Prefijo del área, sin 0
-  #          Ej: 2627 ó 2627530000
-  # @param integer $fijo Número luego del 15, sin 15
-  #          Si sólo especifica prefijo, se tomará como número completo (no recomendado).
-  #          Ej: 530000
-  #
+  # take 3 params, num, msj time
+  # num: is the phone number with code area included by the fault the api of Sms
+  #   require the phone number on format xxxx-xxxxxxxxx, but, if you have other 
+  #   format, you can check it with the method valid_phone?(phone_number)
+  # msj: is a string with the message to send, a message has "180(CHECK)"
+  #   characters, if you include more characters, so you're sending two messages
+  # time: this by default is nil, in case you specified this parameter
+  #   the message will be enqueue at the datetime specified
+  #   with the format "YYYY-MM-DD HH:MM:SS"
+  #   Return true if the message was sended, false in other case
+  ##
   def send(num, msj, time=nil)
     begin
       response = run('enviar', nil, num, msj, time)
@@ -106,19 +124,19 @@ class Smsc
 
   ##
   # ###############################################
-  # #######  Metodos para hacer consultas   #######
+  # ########  Methods for making queries   ########
   # ###############################################
   #
   ##
-  # Devuelve los últimos 30 SMSC recibidos.
+  # Return the lastest 30 messages received
   # 
-  # Lo óptimo es usar esta función cuando se recibe la notificación, que puede
-  # especificar en https://www.smsc.com.ar/usuario/api/
+  # You can specified an URL on https://www.smsc.com.ar/usuario/api/ then the
+  # App will make a get to the url specified, that means you receive a new 
+  # message 
   # 
-  # @param int $ultimoid si se especifica, el sistema sólo devuelve los SMS
-  #            más nuevos al sms con id especificado (acelera la
-  #            consulta y permite un chequeo rápido de nuevos mensajes)
-  #
+  # you can add a paramater 'lastId' by default none, and you can check all
+  # messages recevided from the id specified.
+  ##
   def received(lastId=nil)
     begin
       response = run('recibidos', lastId)
@@ -136,29 +154,13 @@ class Smsc
       false
     end
   end
-    # public function getRecibidos($ultimoid = 0)
-    # {
-    #   $ret = $this->exec('recibidos', '&ultimoid='.(int)$ultimoid);
-    #   if (!$ret)
-    #     return false;
-    #   if ($this->getStatusCode() != 200)
-    #   {
-    #      throw new Exception($this->getStatusMessage(), $this->getStatusCode());
-    #      return false;
-    #   } else {
-    #     return $this->getData();
-    #   }
-    # }
 
-  # Return the lastest 30 smsc messages sent..
+  ##
+  # Return the lastest 30 smsc messages sent
   # 
-  # Lo óptimo es usar esta función cuando se recibe la notificación, que puede
-  # especificar en https://www.smsc.com.ar/usuario/api/
-  # 
-  # @param int $ultimoid si se especifica, el sistema sólo devuelve los SMS
-  #            más nuevos al sms con id especificado (acelera la
-  #            consulta y permite un chequeo rápido de los mensajes enviados)
-  #
+  # you can add a paramater 'lastId' by default none, and you can check all
+  # messages sent from the id specified.
+  ##
   def sent(lastId=nil)
     begin
       response = run('enviados', lastId)
@@ -180,6 +182,10 @@ class Smsc
       error(response["code"])
       false
     end
+  end
+
+  def errors?
+    @errors.any?
   end
 
   private
@@ -216,6 +222,7 @@ class Smsc
   end
 
   def error(code)
+    @errors = []
     case code.to_i
       when 400 
         @errors << "Parameter not specified"
@@ -228,7 +235,7 @@ class Smsc
       when 404 
         @errors << "You must specify at least one valid number"
       when 405 
-        @errors << "You have no messages in your account"
+        @errors << "You don't have balance in your account"
       when 406 
         @errors << "You have exceeded the daily sms limit"
       when 499 

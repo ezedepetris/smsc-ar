@@ -3,12 +3,12 @@ lib = File.expand_path('../lib', __FILE__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 
 Gem::Specification.new do |spec|
-  spec.name          = "smsc-rails"
+  spec.name          = "smsc-ar"
   spec.version       = "0.0.1"
   spec.authors       = ["Ezequiel Depetris"]
   spec.email         = ["ezedepetris@gmail.com"]
 
-  spec.homepage      = "https://github.com/ezedepetris/smsc-rails"
+  spec.homepage      = "https://github.com/ezedepetris/smsc-ar"
   spec.summary       = "A library to send/receive sms on Argentina."
   spec.description   = "A library to send/receive sms Argentina using the app smsc (www.smsc.com.ar)"
   spec.license       = "MIT"

@@ -115,6 +115,9 @@ class Smsc
   def send(num, msj, time=nil)
     begin
       response = run('enviar', nil, num, msj, time)
+      if response["code"] != 200
+        error(respone["code"])
+      end
       response["code"] == 200
     rescue => e
       error(response["code"])
